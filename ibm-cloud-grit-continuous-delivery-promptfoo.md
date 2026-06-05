@@ -12,19 +12,6 @@ Use this setup when you want to:
 
 > Terminology note: IBM Cloud GRIT is IBM-hosted Git Repos and Issue Tracking, built on GitLab Community Edition. GitLab calls pull requests **merge requests**, so this tutorial uses "merge request" for the IBM Cloud flow.
 
-
-## Downloadable scaffold included
-
-This repository now contains the runnable pipeline and helper code described in the tutorial:
-
-- `.tekton/promptfoo-eval.yaml` for Promptfoo eval PipelineRuns.
-- `.tekton/promptfoo-code-scan.yaml` for GRIT merge request code scans.
-- `scripts/*.sh` helper scripts for quality gates, merge request comments, COS uploads, and Secrets Manager bootstrapping.
-- `promptfooconfig.yaml`, `.promptfoo-code-scan.yaml`, and `prompts/customer-support.txt` as a working sample Promptfoo project.
-- `README.md` with quick-start commands and file-by-file usage.
-
-You can download or clone this repository, push it to a GRIT repository, and then point IBM Cloud Continuous Delivery at the `.tekton` pipeline definitions.
-
 ## Prerequisites
 
 - An IBM Cloud account with access to a resource group where you can create services.
@@ -34,7 +21,7 @@ You can download or clone this repository, push it to a GRIT repository, and the
 - LLM provider credentials stored in IBM Cloud Secrets Manager, for example an `OPENAI_API_KEY` secret.
 - A `PROMPTFOO_API_KEY` secret in IBM Cloud Secrets Manager if you want to run `promptfoo code-scans run`.
 - A GRIT personal access token (PAT) with `api` scope if you want the pipeline to post merge request notes. Store this PAT in Secrets Manager as `GRIT_API_TOKEN`.
-- Basic shell tools available in the pipeline task image: `git`, `node`, `npm`, `jq`, and `curl`.
+- Basic shell tools available in the pipeline task image: `git`, `node`, `npm`, `jq`, `curl`, and `bc`.
 
 ## Architecture
 
@@ -207,16 +194,22 @@ Replace the eval command with this script:
 set -euo pipefail
 
 apt-get update
-apt-get install -y jq
-npm install
+apt-get install -y jq bc
+npm install -g promptfoo
 
-npx promptfoo eval \
+promptfoo eval \
   -c promptfooconfig.yaml \
   --share \
   -o promptfoo-results.json \
   -o promptfoo-report.html
 
-scripts/promptfoo-quality-gate.sh promptfoo-results.json 95
+PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' promptfoo-results.json)
+echo "Pass rate: ${PASS_RATE}%"
+
+if (( $(echo "${PASS_RATE} < 95" | bc -l) )); then
+  echo "Quality gate failed: ${PASS_RATE}% < 95%"
+  exit 1
+fi
 ```
 
 This lets you fail the pipeline only when the eval suite drops below a threshold that your team defines.
