@@ -1,0 +1,16 @@
+{
+  "name": "promptfoo-ibm-cloud-grit-continuous-delivery",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Downloadable IBM Cloud GRIT + Continuous Delivery + Secrets Manager integration scaffold for Promptfoo.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "eval": "promptfoo eval -c promptfooconfig.yaml --fail-on-error -o promptfoo-results.json -o promptfoo-report.html",
+    "eval:quality-gate": "scripts/promptfoo-quality-gate.sh promptfoo-results.json 95",
+    "code-scan": "promptfoo code-scans run . --json > promptfoo-code-scan.json",
+    "format-code-scan-comment": "scripts/format-grit-code-scan-comment.sh promptfoo-code-scan.json merge-request-note.json"
+  },
+  "devDependencies": {
+    "promptfoo": "latest"
+  }
+}

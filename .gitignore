@@ -1,0 +1,14 @@
+# Promptfoo outputs and cache
+.promptfoo/
+promptfoo-results.json
+promptfoo-report.html
+promptfoo-code-scan.json
+promptfoo-code-scan.sarif
+merge-request-note.json
+
+# Dependencies
+node_modules/
+
+# Local environment files
+.env
+.env.*

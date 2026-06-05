@@ -1,0 +1,7 @@
+# Promptfoo code scan configuration used by .tekton/promptfoo-code-scan.yaml.
+minSeverity: medium
+diffsOnly: false
+guidance: |
+  Focus on LLM application security issues in IBM Cloud-hosted services.
+  Treat leaked API keys, Secrets Manager values, GRIT tokens, and pipeline credentials as high severity.
+  Treat prompt injection paths that can reach tools, IBM Cloud APIs, or customer data as high severity.

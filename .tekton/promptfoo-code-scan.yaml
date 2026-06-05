@@ -1,0 +1,110 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: promptfoo-code-scan
+spec:
+  description: Run Promptfoo code scans on IBM Cloud GRIT merge requests and post a merge request note.
+  params:
+    - name: PROMPTFOO_API_KEY
+      type: string
+    - name: GRIT_API_TOKEN
+      type: string
+    - name: GRIT_API_BASE_URL
+      type: string
+      default: https://us-south.git.cloud.ibm.com/api/v4
+    - name: GRIT_PROJECT_ID
+      type: string
+    - name: GRIT_MERGE_REQUEST_IID
+      type: string
+    - name: TARGET_BRANCH
+      type: string
+      default: main
+    - name: SOURCE_SHA
+      type: string
+      default: HEAD
+    - name: MAX_FINDINGS
+      type: string
+      default: "20"
+  workspaces:
+    - name: source
+  tasks:
+    - name: promptfoo-code-scan
+      taskSpec:
+        params:
+          - name: PROMPTFOO_API_KEY
+            type: string
+          - name: GRIT_API_TOKEN
+            type: string
+          - name: GRIT_API_BASE_URL
+            type: string
+          - name: GRIT_PROJECT_ID
+            type: string
+          - name: GRIT_MERGE_REQUEST_IID
+            type: string
+          - name: TARGET_BRANCH
+            type: string
+          - name: SOURCE_SHA
+            type: string
+          - name: MAX_FINDINGS
+            type: string
+        workspaces:
+          - name: source
+        steps:
+          - name: run-code-scan
+            image: node:20-bookworm
+            workingDir: $(workspaces.source.path)
+            env:
+              - name: PROMPTFOO_API_KEY
+                value: $(params.PROMPTFOO_API_KEY)
+              - name: GRIT_API_TOKEN
+                value: $(params.GRIT_API_TOKEN)
+              - name: GRIT_API_BASE_URL
+                value: $(params.GRIT_API_BASE_URL)
+              - name: GRIT_PROJECT_ID
+                value: $(params.GRIT_PROJECT_ID)
+              - name: GRIT_MERGE_REQUEST_IID
+                value: $(params.GRIT_MERGE_REQUEST_IID)
+              - name: TARGET_BRANCH
+                value: $(params.TARGET_BRANCH)
+              - name: SOURCE_SHA
+                value: $(params.SOURCE_SHA)
+              - name: MAX_FINDINGS
+                value: $(params.MAX_FINDINGS)
+            script: |
+              #!/usr/bin/env bash
+              set -euo pipefail
+
+              apt-get update
+              apt-get install -y jq curl git
+              npm install
+
+              git fetch origin "$TARGET_BRANCH:$TARGET_BRANCH"
+
+              npx promptfoo code-scans run . \
+                --base "$TARGET_BRANCH" \
+                --compare "$SOURCE_SHA" \
+                --json \
+                > promptfoo-code-scan.json
+
+              scripts/format-grit-code-scan-comment.sh promptfoo-code-scan.json merge-request-note.json
+              scripts/post-grit-merge-request-note.sh merge-request-note.json
+      params:
+        - name: PROMPTFOO_API_KEY
+          value: $(params.PROMPTFOO_API_KEY)
+        - name: GRIT_API_TOKEN
+          value: $(params.GRIT_API_TOKEN)
+        - name: GRIT_API_BASE_URL
+          value: $(params.GRIT_API_BASE_URL)
+        - name: GRIT_PROJECT_ID
+          value: $(params.GRIT_PROJECT_ID)
+        - name: GRIT_MERGE_REQUEST_IID
+          value: $(params.GRIT_MERGE_REQUEST_IID)
+        - name: TARGET_BRANCH
+          value: $(params.TARGET_BRANCH)
+        - name: SOURCE_SHA
+          value: $(params.SOURCE_SHA)
+        - name: MAX_FINDINGS
+          value: $(params.MAX_FINDINGS)
+      workspaces:
+        - name: source
+          workspace: source
