@@ -1,0 +1,114 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: promptfoo-eval
+spec:
+  description: Run Promptfoo evals from an IBM Cloud GRIT repository.
+  params:
+    - name: OPENAI_API_KEY
+      type: string
+    - name: PROMPTFOO_CACHE_PATH
+      type: string
+      default: .promptfoo/cache
+    - name: MIN_PASS_RATE
+      type: string
+      default: "95"
+    - name: USE_CUSTOM_QUALITY_GATE
+      type: string
+      default: "false"
+    - name: UPLOAD_TO_COS
+      type: string
+      default: "false"
+    - name: COS_BUCKET
+      type: string
+      default: ""
+  workspaces:
+    - name: source
+  tasks:
+    - name: promptfoo-eval
+      taskSpec:
+        params:
+          - name: OPENAI_API_KEY
+            type: string
+          - name: PROMPTFOO_CACHE_PATH
+            type: string
+          - name: MIN_PASS_RATE
+            type: string
+          - name: USE_CUSTOM_QUALITY_GATE
+            type: string
+          - name: UPLOAD_TO_COS
+            type: string
+          - name: COS_BUCKET
+            type: string
+        workspaces:
+          - name: source
+        steps:
+          - name: run-eval
+            image: node:20-bookworm
+            workingDir: $(workspaces.source.path)
+            env:
+              - name: OPENAI_API_KEY
+                value: $(params.OPENAI_API_KEY)
+              - name: PROMPTFOO_CACHE_PATH
+                value: $(params.PROMPTFOO_CACHE_PATH)
+              - name: MIN_PASS_RATE
+                value: $(params.MIN_PASS_RATE)
+              - name: USE_CUSTOM_QUALITY_GATE
+                value: $(params.USE_CUSTOM_QUALITY_GATE)
+            script: |
+              #!/usr/bin/env bash
+              set -euo pipefail
+
+              apt-get update
+              apt-get install -y jq
+              npm install
+
+              if [[ "$USE_CUSTOM_QUALITY_GATE" == "true" ]]; then
+                npx promptfoo eval \
+                  -c promptfooconfig.yaml \
+                  --share \
+                  -o promptfoo-results.json \
+                  -o promptfoo-report.html
+                scripts/promptfoo-quality-gate.sh promptfoo-results.json "$MIN_PASS_RATE"
+              else
+                npx promptfoo eval \
+                  -c promptfooconfig.yaml \
+                  --share \
+                  --fail-on-error \
+                  -o promptfoo-results.json \
+                  -o promptfoo-report.html
+              fi
+          - name: upload-artifacts
+            image: icr.io/ibm-cloud-cli/ibm-cloud-cli:latest
+            workingDir: $(workspaces.source.path)
+            env:
+              - name: UPLOAD_TO_COS
+                value: $(params.UPLOAD_TO_COS)
+              - name: COS_BUCKET
+                value: $(params.COS_BUCKET)
+            script: |
+              #!/usr/bin/env bash
+              set -euo pipefail
+
+              if [[ "$UPLOAD_TO_COS" != "true" ]]; then
+                echo "Skipping IBM Cloud Object Storage upload. Set UPLOAD_TO_COS=true to enable it."
+                exit 0
+              fi
+
+              scripts/upload-cos-artifacts.sh promptfoo-results.json promptfoo-report.html
+      params:
+        - name: OPENAI_API_KEY
+          value: $(params.OPENAI_API_KEY)
+        - name: PROMPTFOO_CACHE_PATH
+          value: $(params.PROMPTFOO_CACHE_PATH)
+        - name: MIN_PASS_RATE
+          value: $(params.MIN_PASS_RATE)
+        - name: USE_CUSTOM_QUALITY_GATE
+          value: $(params.USE_CUSTOM_QUALITY_GATE)
+        - name: UPLOAD_TO_COS
+          value: $(params.UPLOAD_TO_COS)
+        - name: COS_BUCKET
+          value: $(params.COS_BUCKET)
+      workspaces:
+        - name: source
+          workspace: source
